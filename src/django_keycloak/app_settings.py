@@ -10,3 +10,7 @@ KEYCLOAK_OIDC_PROFILE_MODEL = 'django_keycloak.OpenIdConnectProfile'
 # Profile
 KEYCLOAK_REMOTE_USER_MODEL = 'django_keycloak.remote_user.KeycloakRemoteUser'
 KEYCLOAK_PERMISSIONS_METHOD = 'role'  # 'role' of 'resource'
+
+
+# oidc_profile.py update_or_create user model use preferred_username or sub (id)
+KEYCLOAK_USE_PREFERRED_USERNAME = False

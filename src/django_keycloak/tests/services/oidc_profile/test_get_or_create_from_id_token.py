@@ -27,6 +27,7 @@ class ServicesOpenIDProfileGetOrCreateFromIdTokenTestCase(
         }
         self.client.openid_api_client.decode_token.return_value = {
             'sub': 'some-sub',
+            'preferred_username': 'some-username',
             'email': 'test@example.com',
             'given_name': 'Some given name',
             'family_name': 'Some family name'

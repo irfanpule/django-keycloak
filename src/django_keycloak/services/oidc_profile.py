@@ -70,7 +70,7 @@ def get_or_create_from_id_token(client, id_token):
             'id_token_signing_alg_values_supported'],
         issuer=issuer
     )
-
+    
     return update_or_create_user_and_oidc_profile(
         client=client, id_token_object=id_token_object)
 
@@ -102,8 +102,14 @@ def update_or_create_user_and_oidc_profile(client, id_token_object):
     with transaction.atomic():
         UserModel = get_user_model()
         email_field_name = UserModel.get_email_field_name()
+
+        if getattr(settings, "KEYCLOAK_USE_PREFERRED_USERNAME", False):
+            username = id_token_object['preferred_username']
+        else:
+            username = id_token_object['sub']
+
         user, _ = UserModel.objects.update_or_create(
-            username=id_token_object['sub'],
+            username=username,
             defaults={
                 email_field_name: id_token_object.get('email', ''),
                 'first_name': id_token_object.get('given_name', ''),
