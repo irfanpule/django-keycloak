@@ -14,7 +14,6 @@ from keycloak.exceptions import KeycloakClientError
 from django_keycloak.services.exceptions import TokensExpired
 from django_keycloak.remote_user import KeycloakRemoteUser
 
-
 import django_keycloak.services.realm
 
 logger = logging.getLogger(__name__)
@@ -75,6 +74,32 @@ def get_or_create_from_id_token(client, id_token):
         client=client, id_token_object=id_token_object)
 
 
+def sync_user_model(id_token_object):
+    """
+    Sync user model with id_token_object
+    :param id_token_object:
+    Return the synched user model
+    """
+    UserModel = get_user_model()
+    email_field_name = UserModel.get_email_field_name()
+
+    if getattr(settings, "KEYCLOAK_USE_PREFERRED_USERNAME", False):
+        username = id_token_object['preferred_username']
+    else:
+        username = id_token_object['sub']
+
+    user, _ = UserModel.objects.update_or_create(
+        username=username,
+        defaults={
+            email_field_name: id_token_object.get('email', ''),
+            'first_name': id_token_object.get('given_name', ''),
+            'last_name': id_token_object.get('family_name', '')
+        }
+    )
+
+    return user
+
+
 def update_or_create_user_and_oidc_profile(client, id_token_object):
     """
 
@@ -100,22 +125,12 @@ def update_or_create_user_and_oidc_profile(client, id_token_object):
         return oidc_profile
 
     with transaction.atomic():
-        UserModel = get_user_model()
-        email_field_name = UserModel.get_email_field_name()
-
-        if getattr(settings, "KEYCLOAK_USE_PREFERRED_USERNAME", False):
-            username = id_token_object['preferred_username']
+        sync_model_handler_setting = getattr(settings, "KEYCLOAK_SYNC_USER_MODEL_HANDLER", None)
+        if sync_model_handler_setting:
+            sync_func = import_string(sync_model_handler_setting)
+            user = sync_func(id_token_object)
         else:
-            username = id_token_object['sub']
-
-        user, _ = UserModel.objects.update_or_create(
-            username=username,
-            defaults={
-                email_field_name: id_token_object.get('email', ''),
-                'first_name': id_token_object.get('given_name', ''),
-                'last_name': id_token_object.get('family_name', '')
-            }
-        )
+            user = sync_user_model(id_token_object)
 
         oidc_profile, _ = OpenIdConnectProfileModel.objects.update_or_create(
             sub=id_token_object['sub'],
@@ -279,7 +294,7 @@ def get_active_access_token(oidc_profile):
 
     if initiate_time > oidc_profile.expires_before:
         # Refresh token
-        token_response = oidc_profile.realm.client.openid_api_client\
+        token_response = oidc_profile.realm.client.openid_api_client \
             .refresh_token(refresh_token=oidc_profile.refresh_token)
 
         oidc_profile = update_tokens(token_model=oidc_profile,
